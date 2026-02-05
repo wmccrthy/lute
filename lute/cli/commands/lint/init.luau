@@ -63,9 +63,10 @@ local function loadLintRule(path: string): types.LintRule
 	return loaded -- Typecast isn't needed because loaded is refined to any bc of type error in assertIsLintRule
 end
 
-local function loadLintRules(path: string): { types.LintRule }
+local function loadLintRules(path: string, config: types.LintConfig): { types.LintRule }
 	assert(fs.exists(path), `Lint rule at path '{path}' does not exist`)
 
+	local rulesConfig = config.rules or {}
 	local rules = {}
 
 	local queue: { string } = { path }
@@ -86,6 +87,11 @@ local function loadLintRules(path: string): { types.LintRule }
 				tableext.extend(queue, childPaths)
 			end
 		elseif pathLib.extname(currentPath) == ".luau" then
+			local loadedRule = loadLintRule(currentPath)
+			local loadedRuleConfig: types.RuleConfig = rulesConfig[loadedRule.name]
+			if loadedRuleConfig and loadedRuleConfig.off then
+				continue
+			end
 			table.insert(rules, loadLintRule(currentPath))
 		end
 	end
@@ -93,11 +99,18 @@ local function loadLintRules(path: string): { types.LintRule }
 	return rules
 end
 
-local function loadDefaultRules(): { types.LintRule }
+local function loadDefaultRules(config: types.LintConfig): { types.LintRule }
+	local rulesConfig = config.rules or {}
 	local rules = {}
 	for _, ruleName in DEFAULT_RULES do
 		local path = `@self/rules/{ruleName}`
 		local rule: types.LintRule = require(path) :: any -- Anycast to silence error from dynamic require
+
+		local ruleConfig: types.RuleConfig = rulesConfig[rule.name]
+		if ruleConfig and ruleConfig.off then
+			continue
+		end
+
 		assertIsLintRule(rule, path)
 		table.insert(rules, rule)
 	end
@@ -453,18 +466,20 @@ local function main(...: string)
 		if VERBOSE then
 			print("Using default lint rules.")
 		end
-		lintRules = loadDefaultRules()
+		lintRules = loadDefaultRules(lintConfig)
 	else
 		if VERBOSE then
 			print(`Loading lint rule(s) from '{rulePath}'`)
 		end
-		lintRules = loadLintRules(rulePath)
+		lintRules = loadLintRules(rulePath, lintConfig)
 	end
 
 	local configuredRulePaths: { pathLib.pathlike } = if lintConfig.rules then lintConfig.rules.paths or {} else {}
 	for _, rulepath in configuredRulePaths do
-		tableext.extend(lintRules, loadLintRules(pathLib.format(rulepath)))
+		tableext.extend(lintRules, loadLintRules(pathLib.format(rulepath), lintConfig))
 	end
+
+	-- filter rules
 
 	if stringInput ~= nil then
 		if args:has("auto-fix") then
