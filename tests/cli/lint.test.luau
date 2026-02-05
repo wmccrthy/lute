@@ -1800,4 +1800,75 @@ local e = next(t) ~= nil
 		assert.strnotcontains(result.stdout, "almost_swapped")
 		assert.strnotcontains(result.stdout, "divide_by_zero")
 	end)
+
+	suite:case(
+		"config-given rule paths are loaded, ran, and do not interfere with CLI-given rule path",
+		function(assert)
+			local configuredRulePath = path.join(tmpDir, "configuredRule.luau")
+			local configuredRuleContents = [[
+		return {
+			name = "configuredRule",
+			lint = function(ast, sourcepath, context)
+				return {
+					{
+						lintname = "configuredRule",
+						severity = "warn",
+						message = "Configured Rule Ran.",
+						location = ast.location
+					}
+				}
+			end
+		}
+		]]
+			fs.writestringtofile(configuredRulePath, configuredRuleContents)
+			local cliProvidedRulePath = path.join(tmpDir, "cliProvidedRule.luau")
+			local cliProvidedRuleContents = [[
+			return {
+			name = "cliRule",
+			lint = function(ast, sourcepath, context)
+				return {
+					{
+						lintname = "cliRule",
+						severity = "warn",
+						message = "CLI Rule Ran.",
+						location = ast.location
+					}
+				}
+			end
+		}
+		]]
+			fs.writestringtofile(cliProvidedRulePath, cliProvidedRuleContents)
+
+			local configFile = path.join(tmpDir, ".config.luau")
+			local configContents = ([[
+		return {
+			lute = {
+				lint = {
+					rules = {
+						paths = { "%s" }
+					}
+				}
+			}
+		}
+		]]):format(path.format(configuredRulePath))
+
+			fs.writestringtofile(configFile, configContents)
+
+			local result = process.run({
+				lutePath,
+				"lint",
+				"-c",
+				path.format(configFile),
+				"-r",
+				path.format(cliProvidedRulePath),
+				path.format(configFile),
+			})
+			assert.eq(result.exitcode, 1)
+			-- both config-given and CLI-given rules should have ran
+			assert.strcontains(result.stdout, "Configured Rule Ran.")
+			assert.strcontains(result.stdout, "CLI Rule Ran.")
+		end
+	)
 end)
+
+test.run()

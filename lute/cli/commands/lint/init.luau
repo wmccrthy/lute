@@ -12,7 +12,7 @@ local tableext = require("@std/tableext")
 local triviaUtils = require("@std/syntax/utils/trivia")
 local types = require("@self/types")
 local visitor = require("@std/syntax/visitor")
-local confgiUtils = require("@self/configutils")
+local configUtils = require("@self/configutils")
 
 local DEFAULT_RULES = { "almost_swapped", "constant_table_comparison", "divide_by_zero", "parenthesized_conditions" }
 local USAGE = "Usage: lute lint [OPTIONS] [...PATHS]"
@@ -431,7 +431,7 @@ local function main(...: string)
 	if fs.exists(configPath :: pathLib.pathlike) then
 		local success, loadedConfig = pcall(luau.loadbypath, configPath :: pathLib.pathlike, nil)
 		if success then
-			lintConfig = confgiUtils.extractConfig(loadedConfig)
+			lintConfig = configUtils.extractConfig(loadedConfig)
 		elseif VERBOSE then
 			print(`Error loading config:\n{loadedConfig}\nProceeding with defaults.`)
 		end
@@ -449,6 +449,11 @@ local function main(...: string)
 			print(`Loading lint rule(s) from '{rulePath}'`)
 		end
 		lintRules = loadLintRules(rulePath)
+	end
+
+	local configuredRulePaths: { pathLib.pathlike } = if lintConfig.rules then lintConfig.rules.paths or {} else {}
+	for _, rulepath in configuredRulePaths do
+		tableext.extend(lintRules, loadLintRules(pathLib.format(rulepath)))
 	end
 
 	if stringInput ~= nil then
