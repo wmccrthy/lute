@@ -208,7 +208,8 @@ end
 local function lintString(
 	source: string,
 	lintRules: { types.LintRule },
-	inputFilePath: pathLib.path?
+	inputFilePath: pathLib.path?,
+	config: types.LintConfig
 ): { types.LintViolation }
 	if VERBOSE then
 		print(`Parsing input {if inputFilePath then `file '{inputFilePath}'` else "string"}`)
@@ -225,8 +226,16 @@ local function lintString(
 	end
 	local violations: { types.LintViolation } = {}
 	local directiveCache = {}
+	local rulesConfig = config.rules or {}
 	for _, rule in lintRules do
-		local success, err = pcall(rule.lint, ast, inputFilePath)
+		local ruleConfig: types.RuleConfig = rulesConfig[rule.name] or {}
+
+		local context: types.RuleContext = {
+			globals = config.globals or {},
+			options = ruleConfig.options,
+		}
+
+		local success, err = pcall(rule.lint, ast, inputFilePath, context)
 		if success then
 			-- On success, err contains the returned violations
 			for _, violation in err do
@@ -297,14 +306,15 @@ end
 local function lintFile(
 	inputFilePath: pathLib.path,
 	lintRules: { types.LintRule },
-	autofixEnabled: boolean
+	autofixEnabled: boolean,
+	lintConfig: types.LintConfig
 ): { types.LintViolation }
 	if VERBOSE then
 		print(`Reading input file '{inputFilePath}'`)
 	end
 	local fileContent = fs.readfiletostring(inputFilePath)
 
-	local violations = lintString(fileContent, lintRules, inputFilePath)
+	local violations = lintString(fileContent, lintRules, inputFilePath, lintConfig)
 
 	if not autofixEnabled then
 		return violations
@@ -334,7 +344,7 @@ local function lintFile(
 
 	fs.writestringtofile(inputFilePath, newContent)
 
-	return lintString(newContent, lintRules, inputFilePath)
+	return lintString(newContent, lintRules, inputFilePath, lintConfig)
 end
 
 local function lintPaths(
@@ -371,7 +381,7 @@ local function lintPaths(
 				continue
 			end
 
-			local success, err = pcall(lintFile, inputFilePath, lintRules, autofixEnabled)
+			local success, err = pcall(lintFile, inputFilePath, lintRules, autofixEnabled, lintConfig)
 			if success then
 				-- Violations are returned as the second return value from pcall
 				allViolations[inputFilePath] = err
@@ -461,7 +471,7 @@ local function main(...: string)
 			print("Auto-fix has no effect on string input.")
 		end
 
-		local violations = lintString(stringInput, lintRules)
+		local violations = lintString(stringInput, lintRules, nil, lintConfig)
 
 		if args:has("json") then
 			local diagnostics = tableext.map(violations, lsp.diagnostic)
