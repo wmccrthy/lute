@@ -1801,6 +1801,39 @@ local e = next(t) ~= nil
 		assert.strnotcontains(result.stdout, "divide_by_zero")
 	end)
 
+	suite:case("lute lint accounts for rule-specific ignores", function(assert)
+		local violatorFile = path.join(tmpDir, "violator.luau")
+		fs.writestringtofile(violatorFile, "local x = 1 / 0")
+
+		local configFile = path.join(tmpDir, ".config.luau")
+		local configContents = [[
+return {
+	lute = {
+		lint = {
+			rules = {
+				["divide_by_zero"] = {
+					ignores = { "violator%.luau" }
+				}
+			}
+		}
+	}
+}
+]]
+		fs.writestringtofile(configFile, configContents)
+
+		-- assert that violations are present without config
+		local result = process.run({ lutePath, "lint", path.format(violatorFile) })
+		assert.eq(result.exitcode, 1) -- should be violations
+		assert.strcontains(result.stdout, "violator.luau")
+		assert.strcontains(result.stdout, "divide_by_zero")
+
+		-- with config, there should be no violations
+		result = process.run({ lutePath, "lint", "-c", path.format(configFile), path.format(violatorFile) })
+		assert.eq(result.exitcode, 0) -- should be no violations
+		assert.strnotcontains(result.stdout, "violator.luau")
+		assert.strnotcontains(result.stdout, "divide_by_zero")
+	end)
+
 	suite:case("lute lint passes context through to rules", function(assert)
 		-- custom rule that returns violating with globals and options in the message
 		local customRuleFile = path.join(tmpDir, "testRule.luau")
