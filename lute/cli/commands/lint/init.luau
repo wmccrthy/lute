@@ -240,8 +240,23 @@ local function lintString(
 	local violations: { types.LintViolation } = {}
 	local directiveCache = {}
 	local rulesConfig = config.rules or {}
+	local inputFilePathString = if inputFilePath then pathLib.format(inputFilePath) else nil
 	for _, rule in lintRules do
 		local ruleConfig: types.RuleConfig = rulesConfig[rule.name] or {}
+
+		local ruleIgnoresPath = false
+		if inputFilePathString then
+			for _, ignore in ruleConfig.ignores or {} do -- ignore matches
+				if inputFilePathString:match(pathLib.format(ignore)) then
+					ruleIgnoresPath = true
+					break
+				end
+			end
+		end
+
+		if ruleIgnoresPath then
+			continue
+		end
 
 		local context: types.RuleContext = {
 			globals = config.globals or {},

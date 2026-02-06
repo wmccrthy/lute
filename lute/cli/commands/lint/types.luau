@@ -24,7 +24,7 @@ export type LintRule = {
 }
 
 export type RuleConfig = {
-	ignores: { string }?,
+	ignores: { path.pathlike }?,
 	severity: severity?,
 	off: true?,
 	options: unknown?,
