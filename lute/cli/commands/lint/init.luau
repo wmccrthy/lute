@@ -267,6 +267,7 @@ local function lintString(
 		if success then
 			-- On success, err contains the returned violations
 			for _, violation in err do
+				violation.severity = ruleConfig.severity or violation.severity -- handle configured severity
 				if not violationIsSuppressed(violation, ast, directiveCache, globalIgnores) then
 					table.insert(violations, violation)
 				end
