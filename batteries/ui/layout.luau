@@ -14,7 +14,7 @@ function layout.measure(node: widget): (number, number)
     if node.kind == "text" or node.kind == "button" then
         width = tui.measure(node._text) + (if node.kind == "button" then 4 else 0)
     elseif node.kind == "input" then width = 20
-    elseif node.kind == "list" then width, height = 20, 1
+    elseif node.kind == "list" or node.kind == "surface" then width, height = 20, 1
     else
         local row = node.kind == "row"
         local count = 0

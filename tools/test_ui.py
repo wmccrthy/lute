@@ -173,14 +173,15 @@ def workbench(command):
         terminal.close()
 
 
-errors = Terminal([BINARY, str(ROOT / "tests/tui/framework_errors.luau")])
-try:
-    errors.finish()
-    assert "caught framework errors" in errors.screen.text(), errors.screen.text()
-    print("PASS framework: async job/paint errors propagate and release terminal ownership")
-finally:
-    errors.close()
-fixture()
-workbench([BINARY, str(ROOT / "examples/workbench/init.luau")])
-if len(sys.argv) > 2:
-    workbench([str(Path(sys.argv[2]).resolve())])
+if __name__ == "__main__":
+    errors = Terminal([BINARY, str(ROOT / "tests/tui/framework_errors.luau")])
+    try:
+        errors.finish()
+        assert "caught framework errors" in errors.screen.text(), errors.screen.text()
+        print("PASS framework: async job/paint errors propagate and release terminal ownership")
+    finally:
+        errors.close()
+    fixture()
+    workbench([BINARY, str(ROOT / "examples/workbench/init.luau")])
+    if len(sys.argv) > 2:
+        workbench([str(Path(sys.argv[2]).resolve())])

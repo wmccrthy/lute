@@ -159,6 +159,21 @@ Already-started native operations follow Lute's existing cancellation behavior:
 the underlying operation may finish before the process exits, even though the
 canceled Luau task no longer resumes. Release other external resources explicitly.
 
+## Custom drawing surfaces
+
+`ui.surface({paint, input?, resize?}, options?)` adds a retained custom renderer.
+The canvas supplies `width`, `height`, `focused`, `firstrow`, `lastrow`, plus local
+`text`/`fill` methods clipped to the inner widget bounds. Paint synchronously;
+respect row damage bounds for incremental rendering. Call
+`widget:invalidate(false, firstrow?, lastrow?)` to schedule paint; omitting row
+bounds invalidates the whole surface. A parent/layout repaint overrides row damage.
+Interactive surfaces can consume Tab before normal focus traversal. See the
+[editor views](editor.md) for a larger use of this API.
+
+`app:focused()` reads the focus target; `app:onfocus(callback)` observes changes.
+`app:cancel(thread)` cancels/removes an owned task. Lists also expose
+`selecteditem()` to read the selected item without accessing internal fields.
+
 ## Performance boundaries and verification
 
 Ordinary value/style/selection changes repaint dirty widgets, not the full tree.

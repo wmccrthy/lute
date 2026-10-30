@@ -647,7 +647,7 @@ int clipText(lua_State* L)
     const char* value = luaL_checklstring(L, 1, &length);
     int width = luaL_checkinteger(L, 2), offset = luaL_optinteger(L, 3, 0);
     luaL_argcheck(L, width >= 0 && width <= 4096, 2, "clip width must be 0..4096");
-    luaL_argcheck(L, offset >= 0 && offset <= 1024 * 1024, 3, "clip offset must be 0..1048576");
+    luaL_argcheck(L, offset >= 0 && offset <= 0x3fffffff, 3, "clip offset must be 0..1073741823");
     auto result = clip(std::string_view(value, length), width, offset);
     lua_pushlstring(L, result.data(), result.size());
     return 1;

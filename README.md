@@ -44,6 +44,8 @@ This fork adds a C++ terminal API exposed to Luau as `@lute/tui` and `@std/tui`.
 See the [API guide](docs/tui.md) and [interactive checklist example](examples/tui.luau).
 The [retained UI battery](docs/ui.md) adds layout, focus, controls, and virtual lists;
 try the [project workbench](examples/workbench/init.luau) for a larger application.
+The [editor API](docs/editor.md) adds documents, independent views, extensible panes,
+and a [terminal code editor](examples/editor/init.luau) that can edit this repository.
 
 ## Building Lute
 

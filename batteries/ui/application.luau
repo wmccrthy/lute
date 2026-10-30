@@ -12,9 +12,10 @@ export type application = {
     _dirty: {[widget]: boolean}, _layout: boolean, _focus: widget?, _focusables: {widget},
     _width: number, _height: number, _stats: stats, _term: tui.session?,
     _scheduled: boolean, _painting: boolean, _running: boolean, _error: string?,
-    _jobs: {[thread]: boolean}, _renderer: thread?, _key: ((tui.event) -> boolean)?,
+    _jobs: {[thread]: boolean}, _renderer: thread?, _key: ((tui.event) -> boolean)?, _focusCallback: ((widget) -> ())?,
     render: (application, paint.terminal) -> (), dispatch: (application, tui.event) -> boolean,
     focus: (application, widget) -> (), stats: (application) -> stats,
+    onfocus: (application, (widget) -> ()) -> (), focused: (application) -> widget?, cancel: (application, thread) -> (),
     onkey: (application, (tui.event) -> boolean) -> (),
     run: (application, tui.options?, (() -> ())?) -> (),
     quit: (application) -> (), spawn: (application, () -> ()) -> thread,
@@ -83,6 +84,7 @@ function App.focus(self: application, node: widget)
     node._focused = true
     self._dirty[node] = true
     schedule(self)
+    if self._focusCallback then self._focusCallback(node) end
 end
 
 function App.render(self: application, term: paint.terminal)
@@ -119,7 +121,7 @@ function App.render(self: application, term: paint.terminal)
                 if dirty[ancestor] then covered = true; break end
                 ancestor = ancestor._parent
             end
-            if not covered then self._stats.paints += paint.node(node, term) end
+            if not covered then self._stats.paints += paint.node(node, term, false) end
         end
     end
     self._stats.frames += 1
@@ -133,6 +135,7 @@ function App.dispatch(self: application, event: tui.event): boolean
         return true
     end
     if event.kind == "key" and event.key == "tab" then
+        if self._focus and self._focus._surface and input.handle(self._focus, event) then return true end
         local count = #self._focusables
         if count > 0 then
             local index = if self._focus then table.find(self._focusables, self._focus) or 0 else 0
@@ -153,6 +156,12 @@ function App.dispatch(self: application, event: tui.event): boolean
     return false
 end
 
+function App.onfocus(self: application, callback: (widget) -> ()) self._focusCallback = callback end
+function App.focused(self: application): widget? return self._focus end
+function App.cancel(self: application, thread: thread)
+    self._jobs[thread] = nil
+    if coroutine.status(thread) ~= "dead" then task.cancel(thread) end
+end
 function App.stats(self: application): stats return table.clone(self._stats) end
 function App.onkey(self: application, callback: (tui.event) -> boolean) self._key = callback end
 function App.running(self: application): boolean return self._running end
@@ -213,7 +222,7 @@ function App.new(root: widget): application
         root = root, _dirty = {}, _layout = true, _focus = nil, _focusables = {},
         _width = 0, _height = 0, _stats = { layouts = 0, paints = 0, frames = 0 },
         _term = nil, _scheduled = false, _painting = false, _running = false, _error = nil,
-        _jobs = {}, _renderer = nil, _key = nil,
+        _jobs = {}, _renderer = nil, _key = nil, _focusCallback = nil,
     }, { __index = App }) :: any
     widgets.attach(root, function(node, needsLayout)
         app._dirty[node] = true

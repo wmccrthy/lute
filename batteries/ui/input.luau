@@ -6,7 +6,7 @@ type widget = widgets.widget
 local input = {}
 
 function input.focusable(node: widget): boolean
-    return node.kind == "input" or node.kind == "button" or node.kind == "list"
+    return (node._surface ~= nil and node._surface.input ~= nil) or node.kind == "input" or node.kind == "button" or node.kind == "list"
 end
 
 function input.hit(node: widget, x: number, y: number): widget?
@@ -33,6 +33,7 @@ local function insert(node: widget, text: string)
 end
 
 function input.handle(node: widget, event: tui.event): boolean
+    if node._surface and node._surface.input then return node._surface.input(event) end
     if event.kind == "mouse" then
         if node.kind == "button" and event.action == "press" then widgets.emit(node, "press"); return true end
         if node.kind == "list" then

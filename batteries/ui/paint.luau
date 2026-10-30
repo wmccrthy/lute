@@ -11,13 +11,25 @@ export type terminal = {
 }
 local paint = {}
 
-function paint.node(node: widget, term: terminal): number
+function paint.node(node: widget, term: terminal, full: boolean?): number
     local r = node._rect
     if r.width == 0 or r.height == 0 or node.options.visible == false then return 0 end
     local style: tui.style = table.clone(node.options.style or ({} :: tui.style))
     if node._focused and (node.kind == "button" or node.kind == "input") then style.reverse = true end
-    term:fill(r.x, r.y, r.width, r.height, style)
-    if node.options.border and r.width >= 2 and r.height >= 2 then
+    local inset = layout.inset(node)
+    local x, y = r.x + inset, r.y + inset
+    local width, height = math.max(0, r.width - 2 * inset), math.max(0, r.height - 2 * inset)
+    local firstrow, lastrow = 1, height
+    local partial = full == false and node._surface ~= nil and not node._damageFull and node._damageFirst ~= nil and node._damageLast ~= nil
+    if partial and height > 0 then
+        firstrow = math.clamp(node._damageFirst :: number, 1, height)
+        lastrow = math.clamp(node._damageLast :: number, firstrow, height)
+    end
+    node._damageFull, node._damageFirst, node._damageLast = false, nil, nil
+    if partial then
+        if width > 0 and height > 0 then term:fill(x, y + firstrow - 1, width, lastrow - firstrow + 1, style) end
+    else term:fill(r.x, r.y, r.width, r.height, style) end
+    if not partial and node.options.border and r.width >= 2 and r.height >= 2 then
         local line = "+" .. string.rep("-", r.width - 2) .. "+"
         term:text(r.x, r.y, line, style)
         term:text(r.x, r.y + r.height - 1, line, style)
@@ -27,13 +39,32 @@ function paint.node(node: widget, term: terminal): number
         end
         if node.options.title then term:text(r.x + 1, r.y, tui.clip(" " .. node.options.title .. " ", r.width - 2), style) end
     end
-    local inset = layout.inset(node)
-    local x, y = r.x + inset, r.y + inset
-    local width, height = math.max(0, r.width - 2 * inset), math.max(0, r.height - 2 * inset)
     local function line(value: string, row: number, lineStyle: tui.style?)
         if width > 0 and row < height then term:text(x, y + row, tui.clip(value, width), lineStyle or style) end
     end
-    if node.kind == "text" then
+    if node._surface and width > 0 and height > 0 then
+        if width ~= node._surfaceWidth or height ~= node._surfaceHeight then
+            node._surfaceWidth, node._surfaceHeight = width, height
+            if node._surface.resize then node._surface.resize(width, height) end
+        end
+        local canvas: widgets.canvas = {
+            width = width, height = height, focused = node._focused, firstrow = firstrow, lastrow = lastrow,
+            text = function(_self, cx, cy, value, customStyle)
+                cx, cy = math.floor(cx), math.floor(cy)
+                if cy < firstrow or cy > lastrow or cx > width then return end
+                local offset = math.max(0, 1 - cx)
+                local left = math.max(1, cx)
+                term:text(x + left - 1, y + cy - 1, tui.clip(value, width - left + 1, offset), customStyle or style)
+            end,
+            fill = function(_self, cx, cy, cw, ch, customStyle)
+                cx, cy, cw, ch = math.floor(cx), math.floor(cy), math.floor(cw), math.floor(ch)
+                local left, top = math.max(1, cx), math.max(firstrow, cy)
+                local right, bottom = math.min(width + 1, cx + cw), math.min(lastrow + 1, cy + ch)
+                if right > left and bottom > top then term:fill(x + left - 1, y + top - 1, right - left, bottom - top, customStyle or style) end
+            end,
+        }
+        node._surface.paint(canvas)
+    elseif node.kind == "text" then
         line(node._text, 0)
     elseif node.kind == "button" then
         line("[ " .. node._text .. " ]", 0)

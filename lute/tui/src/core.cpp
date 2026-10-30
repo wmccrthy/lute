@@ -57,6 +57,8 @@ int cellWidth(uint32_t cp)
 {
     if (cp < 32 || (cp >= 0x7f && cp < 0xa0))
         return -1;
+    if (cp < 0x7f)
+        return 1;
     if (contains(zeroWidth, cp))
         return 0;
     return contains(wideWidth, cp) ? 2 : 1;

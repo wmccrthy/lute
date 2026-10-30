@@ -3,6 +3,16 @@ local tui = require("@std/tui")
 
 export type rect = { x: number, y: number, width: number, height: number }
 export type item = { id: string, text: string, style: tui.style? }
+export type canvas = {
+    width: number, height: number, focused: boolean, firstrow: number, lastrow: number,
+    text: (canvas, number, number, string, tui.style?) -> (),
+    fill: (canvas, number, number, number, number, tui.style?) -> (),
+}
+export type surface = {
+    paint: (canvas) -> (),
+    input: ((tui.event) -> boolean)?,
+    resize: ((number, number) -> ())?,
+}
 export type options = {
     width: number?, height: number?, flex: number?, gap: number?, padding: number?,
     border: boolean?, title: string?, style: tui.style?, visible: boolean?,
@@ -13,12 +23,15 @@ export type event = { kind: string, widget: widget, value: string?, item: item?,
 export type widget = {
     kind: string, options: options, _text: string, _value: string, _caret: number,
     _offset: number, _selection: number, _items: {item}, _children: {widget},
+    _surface: surface?, _surfaceWidth: number, _surfaceHeight: number,
+    invalidate: (widget, boolean?, number?, number?) -> (),
+    _damageFull: boolean, _damageFirst: number?, _damageLast: number?,
     _parent: widget?, _notify: ((widget, boolean) -> ())?, _focused: boolean,
     _rect: rect, _measure: {number}?, _handlers: {[string]: (event) -> ()},
     on: (widget, string, (event) -> ()) -> widget,
     settext: (widget, string) -> (), setvalue: (widget, string) -> (),
     setitems: (widget, {item}) -> (), select: (widget, number) -> (),
-    selected: (widget) -> number, scroll: (widget) -> number, value: (widget) -> string,
+    selecteditem: (widget) -> item?, selected: (widget) -> number, scroll: (widget) -> number, value: (widget) -> string,
     setstyle: (widget, tui.style) -> (), setvisible: (widget, boolean) -> (),
     append: (widget, widget) -> widget, remove: (widget, widget) -> (),
     children: (widget) -> {widget}, bounds: (widget) -> rect, focused: (widget) -> boolean,
@@ -27,7 +40,13 @@ export type widget = {
 local methods = {}
 local widget = {}
 
-function widget.invalidate(node: widget, layout: boolean)
+function widget.invalidate(node: widget, layout: boolean, firstrow: number?, lastrow: number?)
+    if firstrow and lastrow and not layout then
+        if not node._damageFull then
+            node._damageFirst = math.min(node._damageFirst or firstrow, firstrow)
+            node._damageLast = math.max(node._damageLast or lastrow, lastrow)
+        end
+    else node._damageFull = true end
     if layout then
         local ancestor: widget? = node
         while ancestor do
@@ -58,6 +77,7 @@ local function singleline(value: string): string
 end
 widget.singleline = singleline
 
+function methods.invalidate(self: widget, needsLayout: boolean?, firstrow: number?, lastrow: number?) widget.invalidate(self, needsLayout == true, firstrow, lastrow) end
 function methods.on(self: widget, name: string, callback: (event) -> ()): widget
     self._handlers[name] = callback
     return self
@@ -93,6 +113,7 @@ function methods.setvalue(self: widget, value: string)
     widget.invalidate(self, false)
 end
 function methods.value(self: widget): string return self._value end
+function methods.selecteditem(self: widget): item? return self._items[self._selection] end
 function methods.selected(self: widget): number return self._selection end
 function methods.scroll(self: widget): number return self._offset end
 function methods.focused(self: widget): boolean return self._focused end
@@ -160,6 +181,7 @@ function widget.new(kind: string, text: string?, options: options?, children: {w
     local node: widget = setmetatable({
         kind = kind, options = opts, _text = text or "", _value = singleline(opts.value or ""),
         _caret = 0, _offset = 0, _selection = 0, _items = {}, _children = {},
+        _surface = nil, _surfaceWidth = -1, _surfaceHeight = -1, _damageFull = true, _damageFirst = nil, _damageLast = nil,
         _parent = nil, _notify = nil, _focused = false, _measure = nil,
         _rect = { x = 1, y = 1, width = 0, height = 0 }, _handlers = {},
     }, { __index = methods }) :: any
