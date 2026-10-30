@@ -72,7 +72,14 @@ two; ambiguous-width characters occupy one. Invalid UTF-8 becomes U+FFFD. Combin
 marks attach to the preceding cell. Complex emoji graphemes (ZWJ sequences, flags,
 and variation-selector presentation) are not shaped as a single glyph; their
 width can differ from a terminal's display. Use simple text for aligned layouts.
-Screens are bounded to 4096 per dimension and 1,048,576 total cells.
+Screens are bounded to 4096 per dimension and 1,048,576 total cells. Zero-size
+OS viewport reports are clamped to 1×1.
+
+Additional primitives support the [retained UI battery](ui.md):
+`term:fill(x, y, width, height, style?)` fills a cell rectangle with spaces;
+`tui.measure(text)` returns maximum line width and line count; and
+`tui.clip(text, width, offset?)` clips a single line using a zero-based cell offset.
+These helpers share the renderer's Unicode widths. Frames scan only touched rows.
 
 ## Events
 

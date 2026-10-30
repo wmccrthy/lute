@@ -7,6 +7,7 @@
 
 #include "uv.h"
 
+#include <algorithm>
 #include <atomic>
 #include <csignal>
 #include <cstdio>
@@ -216,7 +217,7 @@ struct Session : std::enable_shared_from_this<Session>
         status = uv_tty_get_winsize(output, &width, &height);
         if (status < 0)
             return status;
-        screen.resize(width, height);
+        screen.resize(std::max(1, width), std::max(1, height));
         auto handle = std::make_unique<uv_timer_t>();
         status = uv_timer_init(loop, handle.get());
         if (status < 0)
@@ -270,6 +271,10 @@ struct Session : std::enable_shared_from_this<Session>
                         s->close(uv_strerror(status));
                         return;
                     }
+                    // Some terminals report zero dimensions while minimized.
+                    // Keep a valid logical viewport instead of closing the session.
+                    width = std::max(1, width);
+                    height = std::max(1, height);
                     if (width != s->screen.width() || height != s->screen.height())
                     {
                         s->screen.resize(width, height);
@@ -587,28 +592,65 @@ int color(lua_State* L, int index, const char* field)
     lua_pop(L, 1);
     return value;
 }
+Style readStyle(lua_State* L, int index)
+{
+    Style style;
+    if (!lua_isnoneornil(L, index))
+    {
+        luaL_checktype(L, index, LUA_TTABLE);
+        style.fg = color(L, index, "fg");
+        style.bg = color(L, index, "bg");
+        style.bold = option(L, index, "bold", false);
+        style.dim = option(L, index, "dim", false);
+        style.italic = option(L, index, "italic", false);
+        style.underline = option(L, index, "underline", false);
+        style.reverse = option(L, index, "reverse", false);
+    }
+    return style;
+}
+int coordinate(lua_State* L, int index)
+{
+    int value = luaL_checkinteger(L, index);
+    luaL_argcheck(L, value >= -4096 && value <= 4096, index, "coordinate out of range");
+    return value;
+}
 int text(lua_State* L)
 {
     auto& s = check(L);
-    int x = luaL_checkinteger(L, 2), y = luaL_checkinteger(L, 3);
-    luaL_argcheck(L, x >= -4096 && x <= 4096, 2, "coordinate out of range");
-    luaL_argcheck(L, y >= -4096 && y <= 4096, 3, "coordinate out of range");
+    int x = coordinate(L, 2), y = coordinate(L, 3);
     size_t length;
     const char* value = luaL_checklstring(L, 4, &length);
-    Style style;
-    if (!lua_isnoneornil(L, 5))
-    {
-        luaL_checktype(L, 5, LUA_TTABLE);
-        style.fg = color(L, 5, "fg");
-        style.bg = color(L, 5, "bg");
-        style.bold = option(L, 5, "bold", false);
-        style.dim = option(L, 5, "dim", false);
-        style.italic = option(L, 5, "italic", false);
-        style.underline = option(L, 5, "underline", false);
-        style.reverse = option(L, 5, "reverse", false);
-    }
-    s.screen.text(x, y, std::string_view(value, length), style);
+    s.screen.text(x, y, std::string_view(value, length), readStyle(L, 5));
     return 0;
+}
+int fill(lua_State* L)
+{
+    auto& s = check(L);
+    int x = coordinate(L, 2), y = coordinate(L, 3);
+    int width = coordinate(L, 4), height = coordinate(L, 5);
+    luaL_argcheck(L, width >= 0 && height >= 0, 4, "fill dimensions must be nonnegative");
+    s.screen.fill(x, y, width, height, readStyle(L, 6));
+    return 0;
+}
+int measureText(lua_State* L)
+{
+    size_t length;
+    const char* value = luaL_checklstring(L, 1, &length);
+    auto size = measure(std::string_view(value, length));
+    lua_pushinteger(L, size.first);
+    lua_pushinteger(L, size.second);
+    return 2;
+}
+int clipText(lua_State* L)
+{
+    size_t length;
+    const char* value = luaL_checklstring(L, 1, &length);
+    int width = luaL_checkinteger(L, 2), offset = luaL_optinteger(L, 3, 0);
+    luaL_argcheck(L, width >= 0 && width <= 4096, 2, "clip width must be 0..4096");
+    luaL_argcheck(L, offset >= 0 && offset <= 1024 * 1024, 3, "clip offset must be 0..1048576");
+    auto result = clip(std::string_view(value, length), width, offset);
+    lua_pushlstring(L, result.data(), result.size());
+    return 1;
 }
 int supported(lua_State* L)
 {
@@ -636,6 +678,7 @@ int luteopen_tui(lua_State* L)
         {"clear", tui::clear},
         {"size", tui::size},
         {"text", tui::text},
+        {"fill", tui::fill},
         {"present", tui::present},
         {nullptr, nullptr}
     };
@@ -654,6 +697,10 @@ int luteopen_tui(lua_State* L)
     lua_setfield(L, -2, "open");
     lua_pushcfunction(L, tui::supported, "tui.supported");
     lua_setfield(L, -2, "supported");
+    lua_pushcfunction(L, tui::measureText, "tui.measure");
+    lua_setfield(L, -2, "measure");
+    lua_pushcfunction(L, tui::clipText, "tui.clip");
+    lua_setfield(L, -2, "clip");
     lua_setreadonly(L, -1, 1);
     return 1;
 }

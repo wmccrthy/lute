@@ -98,3 +98,40 @@ TEST_CASE("tui_styles_and_resize_force_a_complete_repaint")
     screen.resize(5, 2);
     CHECK_FALSE(screen.render().empty());
 }
+
+TEST_CASE("tui_measurement_and_cell_slicing_match_native_widths")
+{
+    auto size = measure("a\xe7\x95\x8c\nhello");
+    CHECK(size.first == 5);
+    CHECK(size.second == 2);
+    CHECK(
+        clip(
+            "a\xe7\x95\x8c"
+            "e\xcc\x81",
+            2,
+            2
+        ) == " e\xcc\x81"
+    );
+    CHECK(clip("\xe7\x95\x8c", 1, 0).empty());
+    CHECK(clip("e\xcc\x81!", 1, 0) == "e\xcc\x81");
+    CHECK(clip("a\x1b\nignored", 10, 0) == "a");
+}
+
+TEST_CASE("tui_dirty_rows_avoid_full_frame_scans_and_fill_repairs_wide_edges")
+{
+    Screen screen(80, 24);
+    screen.render();
+    CHECK(screen.scannedCells() == 80 * 24);
+    CHECK(screen.render().empty());
+    CHECK(screen.scannedCells() == 0);
+    screen.text(2, 12, "one row", {});
+    screen.render();
+    CHECK(screen.scannedCells() == 80);
+    screen.text(2, 12, "\xe7\x95\x8c", {});
+    screen.fill(3, 12, 1, 1, {});
+    CHECK(screen.at(2, 12).text == " ");
+    CHECK(screen.at(3, 12).text == " ");
+    screen.resize(20, 8);
+    screen.render();
+    CHECK(screen.scannedCells() == 20 * 8);
+}

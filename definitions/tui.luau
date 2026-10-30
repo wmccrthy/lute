@@ -23,6 +23,7 @@ export type session = {
     clear: (self: session) -> (),
     size: (self: session) -> (number, number),
     text: (self: session, x: number, y: number, value: string, style: style?) -> (),
+    fill: (self: session, x: number, y: number, width: number, height: number, style: style?) -> (),
     present: (self: session) -> (),
 }
 
@@ -33,6 +34,16 @@ end
 
 --- Own the terminal until close. Prefer @std/tui.run for scoped cleanup.
 function tui.open(_options: options?): session
+    error("unimplemented")
+end
+
+--- Measure maximum line width and line count using the renderer's scalar widths.
+function tui.measure(_value: string): (number, number)
+    error("unimplemented")
+end
+
+--- Clip a single line to cell width, starting at a zero-based cell offset.
+function tui.clip(_value: string, _width: number, _offset: number?): string
     error("unimplemented")
 end
 

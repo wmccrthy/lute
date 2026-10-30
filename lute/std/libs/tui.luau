@@ -10,6 +10,8 @@ export type session = native.session
 local tui = {
     supported = native.supported,
     open = native.open,
+    measure = native.measure,
+    clip = native.clip,
 }
 
 --- Run an application and restore the terminal on return or error, including after yields.

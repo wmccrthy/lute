@@ -149,6 +149,73 @@ std::string styleSequence(const Style& s)
 }
 } // namespace
 
+std::pair<int, int> measure(std::string_view value)
+{
+    int width = 0, maximum = 0, height = 1;
+    while (!value.empty())
+    {
+        uint32_t cp;
+        size_t n = decode(value, cp);
+        if (!n)
+        {
+            n = value.size();
+            cp = 0xfffd;
+        }
+        value.remove_prefix(n);
+        if (cp == '\n')
+        {
+            maximum = std::max(maximum, width);
+            width = 0;
+            ++height;
+        }
+        else
+            width += std::max(0, cellWidth(cp));
+    }
+    return {std::max(maximum, width), height};
+}
+
+std::string clip(std::string_view value, int width, int offset)
+{
+    std::string result;
+    int column = 0;
+    bool attached = false;
+    while (!value.empty())
+    {
+        uint32_t cp;
+        size_t n = decode(value, cp);
+        if (!n)
+        {
+            n = value.size();
+            cp = 0xfffd;
+        }
+        auto bytes = value.substr(0, n);
+        value.remove_prefix(n);
+        if (cp == '\n')
+            break;
+        int cells = cellWidth(cp);
+        if (cells < 0)
+            continue;
+        if (cells == 0)
+        {
+            if (attached)
+                result += cp == 0xfffd ? "\xef\xbf\xbd" : std::string(bytes);
+            continue;
+        }
+        attached = false;
+        if (column >= offset + width)
+            break;
+        if (column >= offset && column + cells <= offset + width)
+        {
+            result += cp == 0xfffd ? "\xef\xbf\xbd" : std::string(bytes);
+            attached = true;
+        }
+        else if (column < offset && column + cells > offset && width > 0)
+            result += ' '; // A viewport starting in a wide glyph keeps cell alignment.
+        column += cells;
+    }
+    return result;
+}
+
 void Input::emit(Event event)
 {
     if (events.size() >= maxEvents)
@@ -375,7 +442,7 @@ void Screen::resize(int width, int height)
     rows = height;
     cells = std::move(replacement);
     previous.resize(cells.size());
-    invalid = true;
+    invalidate();
 }
 
 const Cell& Screen::at(int x, int y) const
@@ -385,14 +452,44 @@ const Cell& Screen::at(int x, int y) const
 void Screen::clear()
 {
     std::fill(cells.begin(), cells.end(), Cell{});
+    for (int y = 0; y < rows; ++y)
+        markRow(y);
 }
 void Screen::invalidate()
 {
     invalid = true;
+    dirty.assign(rows, false);
+    dirtyRows.clear();
+    for (int y = 0; y < rows; ++y)
+        markRow(y);
+}
+
+void Screen::markRow(int y)
+{
+    if (!dirty[y])
+    {
+        dirty[y] = true;
+        dirtyRows.push_back(y);
+    }
+}
+
+void Screen::fill(int x, int y, int width, int height, Style style)
+{
+    int right = std::min(columns, x - 1 + width);
+    int bottom = std::min(rows, y - 1 + height);
+    for (int row = std::max(0, y - 1); row < bottom; ++row)
+    {
+        for (int column = std::max(0, x - 1); column < right; ++column)
+        {
+            eraseGlyph(column, row);
+            cells[size_t(row) * columns + column] = {" ", style, 1};
+        }
+    }
 }
 
 void Screen::eraseGlyph(int x, int y)
 {
+    markRow(y);
     auto i = size_t(y) * columns + x;
     if (cells[i].width == 0 && x > 0)
         cells[i - 1] = Cell{};
@@ -436,7 +533,10 @@ void Screen::text(int x, int y, std::string_view value, Style style)
                 if (cells[size_t(y) * columns + previousX].width == 0)
                     --previousX;
                 if (previousX >= 0)
+                {
+                    markRow(y);
                     cells[size_t(y) * columns + previousX].text += glyph;
+                }
             }
             continue;
         }
@@ -460,7 +560,10 @@ std::string Screen::render()
     Style current;
     bool haveStyle = false;
     int nextX = -1, nextY = -1;
-    for (int y = 0; y < rows; ++y)
+    scanned = 0;
+    for (int y : dirtyRows)
+    {
+        scanned += columns;
         for (int x = 0; x < columns; ++x)
         {
             size_t i = size_t(y) * columns + x;
@@ -479,9 +582,12 @@ std::string Screen::render()
             nextX = x + cell.width;
             nextY = y;
         }
+        std::copy_n(cells.begin() + size_t(y) * columns, columns, previous.begin() + size_t(y) * columns);
+        dirty[y] = false;
+    }
+    dirtyRows.clear();
     if (!out.empty())
         out += "\x1b[0m";
-    previous = cells;
     invalid = false;
     return out;
 }

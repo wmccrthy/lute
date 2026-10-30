@@ -5,10 +5,14 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace tui
 {
+std::pair<int, int> measure(std::string_view value);
+std::string clip(std::string_view value, int width, int offset = 0);
+
 struct Event
 {
     std::string kind = "key";
@@ -56,6 +60,11 @@ public:
     Screen(int width, int height);
     void resize(int width, int height);
     void clear();
+    void fill(int x, int y, int width, int height, Style style);
+    size_t scannedCells() const
+    {
+        return scanned;
+    }
     void text(int x, int y, std::string_view value, Style style);
     // Rendering commits the diff. On an output failure invalidate before retrying.
     std::string render();
@@ -72,8 +81,12 @@ public:
 
 private:
     void eraseGlyph(int x, int y);
+    void markRow(int y);
     int columns = 0, rows = 0;
     bool invalid = true;
     std::vector<Cell> cells, previous;
+    std::vector<bool> dirty;
+    std::vector<int> dirtyRows;
+    size_t scanned = 0;
 };
 } // namespace tui
