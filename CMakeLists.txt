@@ -254,6 +254,7 @@ add_subdirectory(lute/process)
 add_subdirectory(lute/system)
 add_subdirectory(lute/time)
 add_subdirectory(lute/io)
+add_subdirectory(lute/tui)
 add_subdirectory(lute/syntax)
 add_subdirectory(lute/debug)
 

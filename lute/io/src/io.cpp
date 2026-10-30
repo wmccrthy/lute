@@ -1,6 +1,7 @@
 #include "lute/io.h"
 
 #include "lute/runtime.h"
+#include "lute/tui.h"
 
 #include "Luau/Variant.h"
 
@@ -103,6 +104,8 @@ static void onWrite(uv_write_t* req, int status)
 
 int write(lua_State* L)
 {
+    if (tui::terminalOwned())
+        luaL_error(L, "stdout is owned by a tui session");
     int nargs = lua_gettop(L);
 
     std::string toWrite;
@@ -154,6 +157,8 @@ int write(lua_State* L)
 
 int read(lua_State* L)
 {
+    if (tui::terminalOwned())
+        luaL_error(L, "stdin is owned by a tui session");
     auto handle = std::make_shared<IOHandle>();
     handle->loop = getRuntimeLoop(L);
     handle->resumeToken = getResumeToken(L);

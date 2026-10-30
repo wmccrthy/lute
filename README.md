@@ -38,6 +38,11 @@ The Lute repository fundamentally contains three sets of libraries. These are as
 Contributions to any of these libraries are welcome, and we encourage you to open issues or pull requests if you have
 any feedback or contributions to make.
 
+## Terminal UI
+
+This fork adds a C++ terminal API exposed to Luau as `@lute/tui` and `@std/tui`.
+See the [API guide](docs/tui.md) and [interactive checklist example](examples/tui.luau).
+
 ## Building Lute
 
 Lute has a fairly conventional C++ build system built atop CMake. However, in the interest of dogfooding Lute itself,
